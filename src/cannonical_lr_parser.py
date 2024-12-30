@@ -195,144 +195,45 @@ class CanonicalLRParser:
         return first_set
 
     def closure(self, items: set[LRItem]):
-        # print("Initial items:")
-        # for item in items:
-        #     print(item)
-        # print("\nStarting closure computation...\n")
-
         closure_set = items.copy()
-        while True:
-            # print("Current closure set:")
-            # for item in closure_set:
-            #     print(item)
-            # print("\n")
 
+        while True:
             new_items = set()
             for item in closure_set:
-                # print(f"Processing item: {item}")
                 # If dot is not at the end
                 if item.dot_position < len(item.production[1]):
                     symbol_after_dot = item.production[1][item.dot_position]
-                    # print(f"Symbol after dot: {symbol_after_dot}")
-
                     # If symbol after dot is a non-terminal
                     if symbol_after_dot in self.non_terminals:
-                        # print(
-                        #     f"{symbol_after_dot} is a non-terminal. Generating new items."
-                        # )
                         # Get the rest of the string after dot
                         beta = list(item.production[1][item.dot_position + 1 :])
-                        # print(f"Beta (string after dot): {beta}\n")
 
                         # For each production with symbol_after_dot on the left
                         for prod in self.grammar:
-                            # print(f"Trying production: {prod}\n")
                             if prod[0] == symbol_after_dot:
-                                # print(f"Considering production: {prod}")
-
                                 # Calculate lookahead for this new item
                                 new_lookahead = set()
-
                                 # If β is empty, lookahead is the same as the original item
                                 if not beta:
                                     new_lookahead.update(item.lookahead)
-                                    # print(f"Beta is empty. Lookahead: {new_lookahead}")
                                 else:
                                     # Compute FIRST(β)
                                     first_beta = self.compute_first_of_string(beta)
-                                    # print(f"FIRST(β): {first_beta}")
-
                                     # If β →* ε, include the lookahead of the original item
                                     if "ε" in first_beta:
                                         new_lookahead.update(item.lookahead)
                                         first_beta.remove("ε")
-                                        # print(
-                                        #     f"β →* ε. Updated lookahead: {new_lookahead}"
-                                        # )
-
                                     new_lookahead.update(first_beta)
-                                    # print(
-                                    #     f"Lookahead after including FIRST(β): {new_lookahead}"
-                                    # )
-
                                 new_item = LRItem((prod[0], prod[1]), 0, new_lookahead)
-                                # print(f"Generated new item: {new_item}")
-
                                 if new_item not in closure_set:
-                                    # print(f"New item {new_item} added to new_items.\n")
                                     new_items.add(new_item)
-                                # else:
-                                #     print(f"Item {new_item} already in closure set.\n")
 
             if not new_items:
-                # print("No new items generated. Closure computation complete.\n")
                 break
-
-            # print("Adding new items to closure set:")
-            # for item in new_items:
-            #     print(item)
-            # print("\n")
 
             closure_set.update(new_items)
 
-        # print("Final closure set:")
-        # for item in closure_set:
-        #     print(item)
-        # print("\n")
-
         return closure_set
-
-    # def closure(self, items: set[LRItem]):
-    #     closure_set = items
-
-    #     while True:
-    #         updated_closure_set = closure_set.copy()
-    #         for item in closure_set:
-    #             if item.dot_position < len(item.production[1]):
-    #                 symbol_after_dot = item.production[1][item.dot_position]
-    #                 if symbol_after_dot in self.non_terminals:
-    #                     # Find all productions where symbol_after_dot is on the left side
-    #                     for prod in self.grammar:
-    #                         if prod[0] == symbol_after_dot:
-    #                             # Calculate lookahead
-    #                             remaining = list(
-    #                                 item.production[1][item.dot_position + 1 :]
-    #                             )
-
-    #                             if 0:  # old one
-    #                                 remaining.extend(list(item.lookahead))
-    #                                 first_set = set()
-
-    #                                 for symbol in remaining:
-    #                                     if symbol in self.first_sets:
-    #                                         first_set.update(
-    #                                             self.first_sets[symbol] - {"ε"}
-    #                                         )
-    #                                 if not remaining or all(
-    #                                     "ε" in self.first_sets.get(symbol, set())
-    #                                     for symbol in remaining
-    #                                 ):
-    #                                     first_set.update(item.lookahead)
-
-    #                             remaining_first = self.compute_first_of_string(
-    #                                 remaining
-    #                             )
-    #                             if (
-    #                                 not remaining_first
-    #                             ):  # if there are no entry after the string, then the lookahead is the lookahead of the item producing the closure
-    #                                 lookahead = item.lookahead.copy()
-    #                             else:
-    #                                 lookahead = remaining_first.copy()
-
-    #                             new_item = LRItem((prod[0], prod[1]), 0, lookahead)
-    #                             if new_item not in updated_closure_set:
-    #                                 updated_closure_set.add(new_item)
-
-    #         if len(updated_closure_set - closure_set) == 0:
-    #             break
-    #         closure_set.update(updated_closure_set)
-
-    #     return closure_set
 
     def goto(self, items: set[LRItem], symbol: str):
         goto_set = set()
