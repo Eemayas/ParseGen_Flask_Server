@@ -9,9 +9,10 @@ class CanonicalLRParser:
         self.non_terminals = []
         self.first_sets: dict[str, set] = {}
         self.follow_sets: dict[str, set] = {}
-        self.canonical_collection: list[set[LRItem]] = []
+        self.canonical_collection: list[LRItem] = []
         self.goto_table = {}
         self.action_table = {}
+        self.goto_and_action_table = {}
         self.initialize_grammar()
         self.compute_first_sets()
         self.compute_follow_sets()
@@ -21,12 +22,10 @@ class CanonicalLRParser:
 
         self.build_canonical_collection()
 
-        self.display_cannonical_collection()
-
         self.build_parsing_table()
 
-        print(self.get_action_and_goto_table())
-    
+        self.print_parsing_tables()
+
     def get_first_sets_table(self):
         headers = ["Symbol", "First"]
         data: list[tuple[str, set[str]]] = []
@@ -57,34 +56,6 @@ class CanonicalLRParser:
     def display_grammar(self):
         for symbol, production in self.grammar:
             print(f"{symbol} → {''.join(production)}")
-
-    def display_cannonical_collection(self):
-        for cannonical_set in self.canonical_collection:
-            print("\n", "-"*20, f"Cannonical Set: {self.canonical_collection.index(cannonical_set)}","-"*20)
-            for item in cannonical_set:
-                print(item.__str__())
-            print("-"*40)
-
-    def get_action_and_goto_table(self):
-        # augmenting to include $
-        augmented_terminals = self.terminals.copy().union(set(["$"]))
-        headers = list(augmented_terminals)
-        headers.extend(self.non_terminals)
-        data: list[list[int | str | tuple[int, str]]] = []
-
-        total_states = len(self.canonical_collection)
-        for i in range(total_states):
-            row = [i]
-            for col in headers:
-                if col in augmented_terminals and (i, col) in self.action_table:
-                    row.append(self.action_table[(i, col)])
-                elif col in self.non_terminals and (i, col) in self.goto_table:
-                    row.append(self.goto_table[(i, col)])
-                else:
-                    row.append(" ")
-            data.append(row)
-        return tabulate(data, headers=headers, tablefmt="simple_grid")
-
 
     def initialize_grammar(self):
         # Add augmented production S' → S
@@ -207,19 +178,6 @@ class CanonicalLRParser:
                 break
 
     def compute_first_of_string(self, symbols: list[str]):
-        """
-        Useful to get the first while calculating look ahdead
-
-        Parameters
-        ----------
-        symbols : list[str]
-            remaining symbols to calculate the first(omit other lookaheads)
-
-        Returns
-        -------
-        set(str) and a bool
-            returns a set of first of given string (possibly empty) and a bool denoting if whole string is nullable
-        """
         all_nullable = True
         first_set: set[str] = set()
         for symbol in symbols:
@@ -234,10 +192,11 @@ class CanonicalLRParser:
 
             if not all_nullable:
                 break
-        return first_set, all_nullable
+        return first_set
 
     def closure(self, items: set[LRItem]):
-        closure_set = items
+        closure_set = items.copy()
+
         while True:
             new_items = set()
             for item in closure_set:
@@ -252,38 +211,22 @@ class CanonicalLRParser:
                         # For each production with symbol_after_dot on the left
                         for prod in self.grammar:
                             if prod[0] == symbol_after_dot:
-                                # Calculate lookahead
-                                remaining = list(
-                                    item.production[1][item.dot_position + 1 :]
-                                )
-                                
-                                if 0: # old one
-                                    print("this will never execute")
-                                    remaining.extend(list(item.lookahead))
-                                    first_set = set()
-                                    
-                                    for symbol in remaining:
-                                        if symbol in self.first_sets:
-                                            first_set.update(
-                                                self.first_sets[symbol] - {"ε"}
-                                            )
-                                    if not remaining or all(
-                                        "ε" in self.first_sets.get(symbol, set())
-                                        for symbol in remaining
-                                    ):
-                                        first_set.update(item.lookahead)
-
-                                remaining_first, remaining_nullable = self.compute_first_of_string(remaining)
-                                if not remaining_first: # if there are no entry after the string, then the lookahead is the lookahead of the item producing the closure
-                                    lookahead = item.lookahead.copy()
+                                # Calculate lookahead for this new item
+                                new_lookahead = set()
+                                # If β is empty, lookahead is the same as the original item
+                                if not beta:
+                                    new_lookahead.update(item.lookahead)
                                 else:
-                                    lookahead = remaining_first.copy()
-                                    if remaining_nullable:
-                                        lookahead = lookahead.union(item.lookahead) # if whole string can be null then the remaining lookahead is also the lookahead
-
-                                new_item = LRItem((prod[0], prod[1]), 0, lookahead)
-                                if new_item not in updated_closure_set:
-                                    updated_closure_set.add(new_item)
+                                    # Compute FIRST(β)
+                                    first_beta = self.compute_first_of_string(beta)
+                                    # If β →* ε, include the lookahead of the original item
+                                    if "ε" in first_beta:
+                                        new_lookahead.update(item.lookahead)
+                                        first_beta.remove("ε")
+                                    new_lookahead.update(first_beta)
+                                new_item = LRItem((prod[0], prod[1]), 0, new_lookahead)
+                                if new_item not in closure_set:
+                                    new_items.add(new_item)
 
             if not new_items:
                 break
@@ -309,10 +252,8 @@ class CanonicalLRParser:
     def build_canonical_collection(self):
         # Start with initial item [S' → •S, $]
         initial_item = LRItem((self.grammar[0][0], self.grammar[0][1]), 0, {"$"})
-        print("the initial item is:")
-        print(type(initial_item))
         initial_state = self.closure({initial_item})
-        
+
         self.canonical_collection = [initial_state]
         symbols = self.non_terminals + self.terminals
 
@@ -323,12 +264,15 @@ class CanonicalLRParser:
 
             for symbol in symbols:
                 goto_set = self.goto(current_state, symbol)
-
                 if goto_set:
                     if goto_set not in self.canonical_collection:
                         self.canonical_collection.append(goto_set)
                     goto_state_index = self.canonical_collection.index(goto_set)
+                    # if symbol in self.non_terminals:
                     self.goto_table[(state_index, symbol)] = goto_state_index
+                    # elif symbol in self.terminals:
+                    #     self.action_table[(state_index, symbol)] = goto_state_index
+                    # self.goto_and_action_table[(state_index, symbol)] = goto_state_index
 
             state_index += 1
 
@@ -402,39 +346,39 @@ class CanonicalLRParser:
                             prod_index = self.grammar.index(item.production)
                             self.action_table[(i, lookahead)] = ("reduce", prod_index)
 
-    # def parse(self, input_string):
-    #     # Add end marker to input
-    #     input_tokens = input_string.split()
-    #     input_tokens.append("$")
+    def parse(self, input_string):
+        # Add end marker to input
+        input_tokens = input_string.split()
+        input_tokens.append("$")
 
-    #     # Initialize stack with state 0
-    #     stack = [(0, "$")]
-    #     input_pos = 0
+        # Initialize stack with state 0
+        stack = [(0, "$")]
+        input_pos = 0
 
-    #     while True:
-    #         current_state = stack[-1][0]
-    #         current_input = input_tokens[input_pos]
+        while True:
+            current_state = stack[-1][0]
+            current_input = input_tokens[input_pos]
 
-    #         if (current_state, current_input) not in self.action_table:
-    #             raise ValueError(f"Parsing error at position {input_pos}")
+            if (current_state, current_input) not in self.action_table:
+                raise ValueError(f"Parsing error at position {input_pos}")
 
-    #         action, value = self.action_table[(current_state, current_input)]
+            action, value = self.action_table[(current_state, current_input)]
 
-    #         if action == "shift":
-    #             stack.append((value, current_input))
-    #             input_pos += 1
-    #         elif action == "reduce":
-    #             production = self.grammar[value]
-    #             # Pop |β| symbols off the stack
-    #             for _ in range(len(production[1])):
-    #                 stack.pop()
-    #             # Go to state found in goto table
-    #             prev_state = stack[-1][0]
-    #             goto_state = self.goto_table[(prev_state, production[0])]
-    #             stack.append((goto_state, production[0]))
-    #         elif action == "accept":
-    #             return True
+            if action == "shift":
+                stack.append((value, current_input))
+                input_pos += 1
+            elif action == "reduce":
+                production = self.grammar[value]
+                # Pop |β| symbols off the stack
+                for _ in range(len(production[1])):
+                    stack.pop()
+                # Go to state found in goto table
+                prev_state = stack[-1][0]
+                goto_state = self.goto_table[(prev_state, production[0])]
+                stack.append((goto_state, production[0]))
+            elif action == "accept":
+                return True
 
-    #         print(f"Stack: {stack}")
-    #         print(f"Input: {' '.join(input_tokens[input_pos:])}")
-    #         print(f"Action: {action} {value}\n")
+            print(f"Stack: {stack}")
+            print(f"Input: {' '.join(input_tokens[input_pos:])}")
+            print(f"Action: {action} {value}\n")
