@@ -9,10 +9,9 @@ class CanonicalLRParser:
         self.non_terminals = set()
         self.first_sets: dict[str, set] = {}
         self.follow_sets: dict[str, set] = {}
-        self.canonical_collection: list[LRItem] = []
+        self.canonical_collection: list[set[LRItem]] = []
         self.goto_table = {}
         self.action_table = {}
-        self.goto_and_action_table = {}
         self.initialize_grammar()
         self.compute_first_sets()
         self.compute_follow_sets()
@@ -22,7 +21,11 @@ class CanonicalLRParser:
 
         self.build_canonical_collection()
 
+        self.display_cannonical_collection()
+
         self.build_parsing_table()
+
+        print(self.get_action_and_goto_table())
     
     def get_first_sets_table(self):
         headers = ["Symbol", "First"]
@@ -52,6 +55,34 @@ class CanonicalLRParser:
     def display_grammar(self):
         for symbol, production in self.grammar:
             print(f"{symbol} → {''.join(production)}")
+
+    def display_cannonical_collection(self):
+        for cannonical_set in self.canonical_collection:
+            print("\n", "-"*20, f"Cannonical Set: {self.canonical_collection.index(cannonical_set)}","-"*20)
+            for item in cannonical_set:
+                print(item.__str__())
+            print("-"*40)
+
+    def get_action_and_goto_table(self):
+        # augmenting to include $
+        augmented_terminals = self.terminals.copy().union(set(["$"]))
+        headers = list(augmented_terminals)
+        headers.extend(self.non_terminals)
+        data: list[list[int | str | tuple[int, str]]] = []
+
+        total_states = len(self.canonical_collection)
+        for i in range(total_states):
+            row = [i]
+            for col in headers:
+                if col in augmented_terminals and (i, col) in self.action_table:
+                    row.append(self.action_table[(i, col)])
+                elif col in self.non_terminals and (i, col) in self.goto_table:
+                    row.append(self.goto_table[(i, col)])
+                else:
+                    row.append(" ")
+            data.append(row)
+        return tabulate(data, headers=headers, tablefmt="simple_grid")
+
 
     def initialize_grammar(self):
         # Add augmented production S' → S
@@ -172,6 +203,19 @@ class CanonicalLRParser:
                 break
 
     def compute_first_of_string(self, symbols: list[str]):
+        """
+        Useful to get the first while calculating look ahdead
+
+        Parameters
+        ----------
+        symbols : list[str]
+            remaining symbols to calculate the first(omit other lookaheads)
+
+        Returns
+        -------
+        set(str) and a bool
+            returns a set of first of given string (possibly empty) and a bool denoting if whole string is nullable
+        """
         all_nullable = True
         first_set: set[str] = set()
         for symbol in symbols:
@@ -186,7 +230,7 @@ class CanonicalLRParser:
             
             if not all_nullable:
                 break
-        return first_set
+        return first_set, all_nullable
 
     def closure(self, items: set[LRItem]):
         closure_set = items
@@ -220,11 +264,13 @@ class CanonicalLRParser:
                                     ):
                                         first_set.update(item.lookahead)
 
-                                remaining_first = self.compute_first_of_string(remaining)
+                                remaining_first, remaining_nullable = self.compute_first_of_string(remaining)
                                 if not remaining_first: # if there are no entry after the string, then the lookahead is the lookahead of the item producing the closure
                                     lookahead = item.lookahead.copy()
                                 else:
                                     lookahead = remaining_first.copy()
+                                    if remaining_nullable:
+                                        lookahead = lookahead.union(item.lookahead) # if whole string can be null then the remaining lookahead is also the lookahead
 
                                 new_item = LRItem((prod[0], prod[1]), 0, lookahead)
                                 if new_item not in updated_closure_set:
@@ -269,11 +315,7 @@ class CanonicalLRParser:
                     if goto_set not in self.canonical_collection:
                         self.canonical_collection.append(goto_set)
                     goto_state_index = self.canonical_collection.index(goto_set)
-                    if symbol in self.non_terminals:
-                        self.goto_table[(state_index, symbol)] = goto_state_index
-                    elif symbol in self.terminals:
-                        self.action_table[(state_index, symbol)] = goto_state_index
-                    self.goto_and_action_table[(state_index, symbol)] = goto_state_index
+                    self.goto_table[(state_index, symbol)] = goto_state_index
 
             state_index += 1
         
