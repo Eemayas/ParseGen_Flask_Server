@@ -5,8 +5,8 @@ from tabulate import tabulate
 class CanonicalLRParser:
     def __init__(self, grammar: list[tuple[str, list[str]]]):
         self.grammar: list[tuple[str, list[str]]] = grammar
-        self.terminals = set()
-        self.non_terminals = set()
+        self.terminals = []
+        self.non_terminals = []
         self.first_sets: dict[str, set] = {}
         self.follow_sets: dict[str, set] = {}
         self.canonical_collection: list[LRItem] = []
@@ -64,17 +64,19 @@ class CanonicalLRParser:
         # identify the non-terminals
         # all items which appear in the left side are non-terminals
         for prod in self.grammar:
-            self.non_terminals.add(prod[0])
+            if prod[0] not in self.non_terminals:
+                self.non_terminals.append(prod[0])
 
         # Identify terminals
         for prod in self.grammar:
             for symbol in prod[1]:
                 if symbol not in self.non_terminals:
-                    self.terminals.add(symbol)
+                    if symbol not in self.terminals:
+                        self.terminals.append(symbol)
 
     def compute_first_sets(self):
         # Initialize FIRST sets
-        for symbol in self.terminals | self.non_terminals:
+        for symbol in self.non_terminals + self.terminals:
             self.first_sets[symbol] = set()
             if symbol in self.terminals:
                 self.first_sets[symbol].add(symbol)
@@ -352,7 +354,7 @@ class CanonicalLRParser:
         initial_state = self.closure({initial_item})
 
         self.canonical_collection = [initial_state]
-        symbols = self.terminals | self.non_terminals
+        symbols = self.non_terminals + self.terminals
 
         # Build the collection
         state_index = 0
@@ -386,7 +388,8 @@ class CanonicalLRParser:
         action_rows = []
 
         # Get headers and data for GOTO table
-        non_terminals = list(self.non_terminals - {"S'"})
+        non_terminals = [nt for nt in self.non_terminals if nt != "S'"]
+
         goto_headers = non_terminals
         goto_rows = []
 
