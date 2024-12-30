@@ -234,7 +234,6 @@ class CanonicalLRParser:
 
     def closure(self, items: set[LRItem]):
         closure_set = items
-
         while True:
             updated_closure_set = closure_set.copy()
             for item in closure_set:
@@ -250,6 +249,7 @@ class CanonicalLRParser:
                                 )
                                 
                                 if 0: # old one
+                                    print("this will never execute")
                                     remaining.extend(list(item.lookahead))
                                     first_set = set()
                                     
@@ -299,8 +299,10 @@ class CanonicalLRParser:
     def build_canonical_collection(self):
         # Start with initial item [S' → •S, $]
         initial_item = LRItem((self.grammar[0][0], self.grammar[0][1]), 0, {"$"})
+        print("the initial item is:")
+        print(type(initial_item))
         initial_state = self.closure({initial_item})
-
+        
         self.canonical_collection = [initial_state]
         symbols = self.terminals | self.non_terminals
 

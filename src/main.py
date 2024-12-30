@@ -5,12 +5,12 @@ from cannonical_lr_parser import CanonicalLRParser
 def main():
     # Define the grammar
     grammar = [
-        ("S", ["L", "=", "R"]),
-        ("S", ["R"]),
-        ("L", ["*", "R"]),
-        ("L", ["id"]),
-        ("R", ["L"])
-    ]
+    ("S", ["L", "=", "R"]),  # Assignment statement
+    ("S", ["R"]),            # Expression statement
+    ("R", ["R", "*", "R"]),  # Multiplication
+    ("R", ["L"]),           # R can be L
+    ("L", ["id"])           # L is an identifier
+]
 
     # Create parser
     parser = CanonicalLRParser(grammar)
