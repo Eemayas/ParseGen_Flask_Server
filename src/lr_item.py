@@ -41,13 +41,16 @@ if __name__ == "__main__":
     lr_item_3 = LRItem(productions[1], 1, ["$"])
     lr_item_3_diff_look_ahead = LRItem(productions[1], 1, ["="])
 
+    duplicate_lr_item_3 = LRItem(productions[1], 1, ["$"])
+
+    multiple_lookahead = LRItem(productions[1], 1, ["$", "="])
+
     assert lr_item_1 != lr_item_2
     assert lr_item_1 == lr_item_1
     assert lr_item_1 != lr_item_1_diff_dot_pos
     assert lr_item_2 != lr_item_3
     assert lr_item_3_diff_look_ahead != lr_item_3
 
-    duplicate_lr_item_3 = LRItem(productions[1], 1, ["$"])
     lr_items = set([lr_item_3])
 
     assert duplicate_lr_item_3 in lr_items
@@ -67,6 +70,11 @@ if __name__ == "__main__":
         "\n",
     )
     print("Set of LR Items containing LR Item 3:\n", lr_items, "\n")
+    print(
+        "Multiple lookahead LR Item (LRItem(productions[1], 1, {'$', '='})):\n",
+        multiple_lookahead,
+        "\n",
+    )
 
     print("LR Item 1 is not equal to LR Item 2:", lr_item_1 != lr_item_2, "\n")
     print("LR Item 1 is equal to itself:", lr_item_1 == lr_item_1, "\n")

@@ -23,14 +23,16 @@ class CanonicalLRParser:
         self.build_canonical_collection()
 
         self.build_parsing_table()
-    
+
+        self.print_parsing_tables()
+
     def get_first_sets_table(self):
         headers = ["Symbol", "First"]
         data: list[tuple[str, set[str]]] = []
         for symbol, symbols in self.first_sets.items():
             data.append((symbol, symbols))
 
-        return tabulate(data, headers=headers,  tablefmt="simple_grid")
+        return tabulate(data, headers=headers, tablefmt="simple_grid")
 
     def get_follow_sets_table(self):
         headers = ["Symbol", "Follow"]
@@ -38,17 +40,19 @@ class CanonicalLRParser:
         for symbol, symbols in self.follow_sets.items():
             data.append((symbol, symbols))
 
-        return tabulate(data, headers=headers,  tablefmt="simple_grid")
+        return tabulate(data, headers=headers, tablefmt="simple_grid")
 
     def get_first_and_follow_sets_table(self):
         headers = ["Symbol", "First", "Follow"]
         data: list[tuple[str, set[str], set[str]]] = []
         for symbol, symbols in self.first_sets.items():
-            follow_set_val = self.follow_sets.get(symbol, " ") # use space for non-terminals
+            follow_set_val = self.follow_sets.get(
+                symbol, " "
+            )  # use space for non-terminals
             data.append((symbol, symbols, follow_set_val))
 
-        return tabulate(data, headers=headers,  tablefmt="simple_grid")
-    
+        return tabulate(data, headers=headers, tablefmt="simple_grid")
+
     def display_grammar(self):
         for symbol, production in self.grammar:
             print(f"{symbol} → {''.join(production)}")
@@ -175,66 +179,158 @@ class CanonicalLRParser:
         all_nullable = True
         first_set: set[str] = set()
         for symbol in symbols:
-            if symbol == "$": # for handling look ahead conditions
+            if symbol == "$":  # for handling look ahead conditions
                 all_nullable = False
                 first_set.update(symbol)
-            elif 'ε' in self.first_sets[symbol]:
-                first_set.update(self.first_sets[symbol] - {'ε'})
+            elif "ε" in self.first_sets[symbol]:
+                first_set.update(self.first_sets[symbol] - {"ε"})
             else:
                 all_nullable = False
                 first_set.update(self.first_sets[symbol])
-            
+
             if not all_nullable:
                 break
         return first_set
 
     def closure(self, items: set[LRItem]):
-        closure_set = items
+        # print("Initial items:")
+        # for item in items:
+        #     print(item)
+        # print("\nStarting closure computation...\n")
 
+        closure_set = items.copy()
         while True:
-            updated_closure_set = closure_set.copy()
+            # print("Current closure set:")
+            # for item in closure_set:
+            #     print(item)
+            # print("\n")
+
+            new_items = set()
             for item in closure_set:
+                # print(f"Processing item: {item}")
+                # If dot is not at the end
                 if item.dot_position < len(item.production[1]):
                     symbol_after_dot = item.production[1][item.dot_position]
+                    # print(f"Symbol after dot: {symbol_after_dot}")
+
+                    # If symbol after dot is a non-terminal
                     if symbol_after_dot in self.non_terminals:
-                        # Find all productions where symbol_after_dot is on the left side
+                        # print(
+                        #     f"{symbol_after_dot} is a non-terminal. Generating new items."
+                        # )
+                        # Get the rest of the string after dot
+                        beta = list(item.production[1][item.dot_position + 1 :])
+                        # print(f"Beta (string after dot): {beta}\n")
+
+                        # For each production with symbol_after_dot on the left
                         for prod in self.grammar:
+                            # print(f"Trying production: {prod}\n")
                             if prod[0] == symbol_after_dot:
-                                # Calculate lookahead
-                                remaining = list(
-                                    item.production[1][item.dot_position + 1 :]
-                                )
-                                
-                                if 0: # old one
-                                    remaining.extend(list(item.lookahead))
-                                    first_set = set()
-                                    
-                                    for symbol in remaining:
-                                        if symbol in self.first_sets:
-                                            first_set.update(
-                                                self.first_sets[symbol] - {"ε"}
-                                            )
-                                    if not remaining or all(
-                                        "ε" in self.first_sets.get(symbol, set())
-                                        for symbol in remaining
-                                    ):
-                                        first_set.update(item.lookahead)
+                                # print(f"Considering production: {prod}")
 
-                                remaining_first = self.compute_first_of_string(remaining)
-                                if not remaining_first: # if there are no entry after the string, then the lookahead is the lookahead of the item producing the closure
-                                    lookahead = item.lookahead.copy()
+                                # Calculate lookahead for this new item
+                                new_lookahead = set()
+
+                                # If β is empty, lookahead is the same as the original item
+                                if not beta:
+                                    new_lookahead.update(item.lookahead)
+                                    # print(f"Beta is empty. Lookahead: {new_lookahead}")
                                 else:
-                                    lookahead = remaining_first.copy()
+                                    # Compute FIRST(β)
+                                    first_beta = self.compute_first_of_string(beta)
+                                    # print(f"FIRST(β): {first_beta}")
 
-                                new_item = LRItem((prod[0], prod[1]), 0, lookahead)
-                                if new_item not in updated_closure_set:
-                                    updated_closure_set.add(new_item)
+                                    # If β →* ε, include the lookahead of the original item
+                                    if "ε" in first_beta:
+                                        new_lookahead.update(item.lookahead)
+                                        first_beta.remove("ε")
+                                        # print(
+                                        #     f"β →* ε. Updated lookahead: {new_lookahead}"
+                                        # )
 
-            if len(updated_closure_set - closure_set) == 0:
+                                    new_lookahead.update(first_beta)
+                                    # print(
+                                    #     f"Lookahead after including FIRST(β): {new_lookahead}"
+                                    # )
+
+                                new_item = LRItem((prod[0], prod[1]), 0, new_lookahead)
+                                # print(f"Generated new item: {new_item}")
+
+                                if new_item not in closure_set:
+                                    # print(f"New item {new_item} added to new_items.\n")
+                                    new_items.add(new_item)
+                                # else:
+                                #     print(f"Item {new_item} already in closure set.\n")
+
+            if not new_items:
+                # print("No new items generated. Closure computation complete.\n")
                 break
-            closure_set.update(updated_closure_set)
+
+            # print("Adding new items to closure set:")
+            # for item in new_items:
+            #     print(item)
+            # print("\n")
+
+            closure_set.update(new_items)
+
+        # print("Final closure set:")
+        # for item in closure_set:
+        #     print(item)
+        # print("\n")
 
         return closure_set
+
+    # def closure(self, items: set[LRItem]):
+    #     closure_set = items
+
+    #     while True:
+    #         updated_closure_set = closure_set.copy()
+    #         for item in closure_set:
+    #             if item.dot_position < len(item.production[1]):
+    #                 symbol_after_dot = item.production[1][item.dot_position]
+    #                 if symbol_after_dot in self.non_terminals:
+    #                     # Find all productions where symbol_after_dot is on the left side
+    #                     for prod in self.grammar:
+    #                         if prod[0] == symbol_after_dot:
+    #                             # Calculate lookahead
+    #                             remaining = list(
+    #                                 item.production[1][item.dot_position + 1 :]
+    #                             )
+
+    #                             if 0:  # old one
+    #                                 remaining.extend(list(item.lookahead))
+    #                                 first_set = set()
+
+    #                                 for symbol in remaining:
+    #                                     if symbol in self.first_sets:
+    #                                         first_set.update(
+    #                                             self.first_sets[symbol] - {"ε"}
+    #                                         )
+    #                                 if not remaining or all(
+    #                                     "ε" in self.first_sets.get(symbol, set())
+    #                                     for symbol in remaining
+    #                                 ):
+    #                                     first_set.update(item.lookahead)
+
+    #                             remaining_first = self.compute_first_of_string(
+    #                                 remaining
+    #                             )
+    #                             if (
+    #                                 not remaining_first
+    #                             ):  # if there are no entry after the string, then the lookahead is the lookahead of the item producing the closure
+    #                                 lookahead = item.lookahead.copy()
+    #                             else:
+    #                                 lookahead = remaining_first.copy()
+
+    #                             new_item = LRItem((prod[0], prod[1]), 0, lookahead)
+    #                             if new_item not in updated_closure_set:
+    #                                 updated_closure_set.add(new_item)
+
+    #         if len(updated_closure_set - closure_set) == 0:
+    #             break
+    #         closure_set.update(updated_closure_set)
+
+    #     return closure_set
 
     def goto(self, items: set[LRItem], symbol: str):
         goto_set = set()
@@ -265,6 +361,7 @@ class CanonicalLRParser:
 
             for symbol in symbols:
                 goto_set = self.goto(current_state, symbol)
+
                 if goto_set:
                     if goto_set not in self.canonical_collection:
                         self.canonical_collection.append(goto_set)
@@ -276,7 +373,52 @@ class CanonicalLRParser:
                     self.goto_and_action_table[(state_index, symbol)] = goto_state_index
 
             state_index += 1
-        
+
+        for i, state in enumerate(self.canonical_collection):
+            print(f"\nState I{i}:")
+            for item in state:
+                print(item)
+
+    def print_parsing_tables(self):
+        # Get headers and data for ACTION table
+        terminals = list(self.terminals) + ["$"]
+        action_headers = ["State"] + terminals
+        action_rows = []
+
+        # Get headers and data for GOTO table
+        non_terminals = list(self.non_terminals - {"S'"})
+        goto_headers = non_terminals
+        goto_rows = []
+
+        max_state = len(self.canonical_collection) - 1
+
+        # Build combined rows
+        for state in range(max_state + 1):
+            # Action part
+            action_row = [state]
+            for symbol in terminals:
+                action = self.action_table.get((state, symbol), "")
+                if isinstance(action, tuple):
+                    action_row.append(action)
+                else:
+                    action_row.append(str(action) if action != "" else "")
+
+            # Goto part
+            goto_row = []
+            for symbol in non_terminals:
+                goto_state = self.goto_table.get((state, symbol), "")
+                goto_row.append(goto_state)
+
+            # Combine rows
+            combined_row = action_row + ["||"] + goto_row
+            action_rows.append(combined_row)
+
+        # Combine headers
+        combined_headers = action_headers + ["||"] + goto_headers
+
+        print("\nParsing Tables (Action | Goto):")
+        print(tabulate(action_rows, headers=combined_headers, tablefmt="simple_grid"))
+
     def build_parsing_table(self):
         for i, state in enumerate(self.canonical_collection):
             for item in state:
@@ -301,39 +443,39 @@ class CanonicalLRParser:
                             prod_index = self.grammar.index(item.production)
                             self.action_table[(i, lookahead)] = ("reduce", prod_index)
 
-    def parse(self, input_string):
-        # Add end marker to input
-        input_tokens = input_string.split()
-        input_tokens.append("$")
+    # def parse(self, input_string):
+    #     # Add end marker to input
+    #     input_tokens = input_string.split()
+    #     input_tokens.append("$")
 
-        # Initialize stack with state 0
-        stack = [(0, "$")]
-        input_pos = 0
+    #     # Initialize stack with state 0
+    #     stack = [(0, "$")]
+    #     input_pos = 0
 
-        while True:
-            current_state = stack[-1][0]
-            current_input = input_tokens[input_pos]
+    #     while True:
+    #         current_state = stack[-1][0]
+    #         current_input = input_tokens[input_pos]
 
-            if (current_state, current_input) not in self.action_table:
-                raise ValueError(f"Parsing error at position {input_pos}")
+    #         if (current_state, current_input) not in self.action_table:
+    #             raise ValueError(f"Parsing error at position {input_pos}")
 
-            action, value = self.action_table[(current_state, current_input)]
+    #         action, value = self.action_table[(current_state, current_input)]
 
-            if action == "shift":
-                stack.append((value, current_input))
-                input_pos += 1
-            elif action == "reduce":
-                production = self.grammar[value]
-                # Pop |β| symbols off the stack
-                for _ in range(len(production[1])):
-                    stack.pop()
-                # Go to state found in goto table
-                prev_state = stack[-1][0]
-                goto_state = self.goto_table[(prev_state, production[0])]
-                stack.append((goto_state, production[0]))
-            elif action == "accept":
-                return True
+    #         if action == "shift":
+    #             stack.append((value, current_input))
+    #             input_pos += 1
+    #         elif action == "reduce":
+    #             production = self.grammar[value]
+    #             # Pop |β| symbols off the stack
+    #             for _ in range(len(production[1])):
+    #                 stack.pop()
+    #             # Go to state found in goto table
+    #             prev_state = stack[-1][0]
+    #             goto_state = self.goto_table[(prev_state, production[0])]
+    #             stack.append((goto_state, production[0]))
+    #         elif action == "accept":
+    #             return True
 
-            print(f"Stack: {stack}")
-            print(f"Input: {' '.join(input_tokens[input_pos:])}")
-            print(f"Action: {action} {value}\n")
+    #         print(f"Stack: {stack}")
+    #         print(f"Input: {' '.join(input_tokens[input_pos:])}")
+    #         print(f"Action: {action} {value}\n")
