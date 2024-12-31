@@ -364,7 +364,18 @@ class CanonicalLRParser:
             current_input = input_tokens[input_pos]
 
             if (current_state, current_input) not in self.action_table:
-                raise ValueError(f"Parsing error at position {input_pos}")
+                # Format current state
+                stack_str = str(stack)
+                input_str = " ".join(input_tokens[input_pos:])
+                action_str = "error"
+
+                # Store step
+                parse_steps.append([stack_str, input_str, action_str])
+
+                # Print error and table
+                print(f"Parsing error at position {input_pos}")
+                print(tabulate(parse_steps, headers=headers, tablefmt="simple_grid"))
+                return False
 
             action, value = self.action_table[(current_state, current_input)]
 
@@ -388,5 +399,5 @@ class CanonicalLRParser:
                 stack.append((goto_state, production[0]))
             elif action == "accept":
                 # Print final table
-                print(tabulate(parse_steps, headers=headers, tablefmt="grid"))
+                print(tabulate(parse_steps, headers=headers, tablefmt="simple_grid"))
                 return True
