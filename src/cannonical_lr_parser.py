@@ -24,9 +24,9 @@ class CanonicalLRParser:
 
         self.print_canonical_collection()
 
-        # self.build_parsing_table()
+        self.build_parsing_table()
 
-        # self.print_parsing_tables()
+        self.print_parsing_tables()
 
     def get_first_sets_table(self):
         headers = ["Symbol", "First"]
@@ -279,10 +279,6 @@ class CanonicalLRParser:
             state_index += 1
 
     def print_canonical_collection(self):
-        # temp=[]
-        # for i, state in enumerate(self.canonical_collection):
-        #     print({})
-
         for i, state in enumerate(self.canonical_collection):
             print(f"\nState I{i}:")
             for item in state:

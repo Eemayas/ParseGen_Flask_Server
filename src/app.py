@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from cannonical_lr_parser import CanonicalLRParser
 from lr_item import LRItem
 from flask_cors import CORS
+from tabulate import tabulate
 
 app = Flask(__name__)
 CORS(app)
@@ -86,49 +87,234 @@ def get_canonical_collection_sets():
 
             if not grammar:
                 return jsonify({"error": "Grammar is required"}), 400
+
             formatted_grammar = [(item[0], item[1]) for item in grammar]
             # Initialize parser
             parser = CanonicalLRParser(formatted_grammar)
 
-        # Debugging: Convert sets to lists for JSON serialization
+        # Convert sets to lists for JSON serialization
         canonical_collection_serialized = []
-        for item in parser.canonical_collection:
-            if isinstance(item, set):
-                # Flatten the set and convert each LRItem to a serializable format
-                canonical_collection_serialized.extend(
-                    [
-                        {
-                            "production": lr_item.production,
-                            "dot_position": lr_item.dot_position,
-                            "lookahead": list(lr_item.lookahead),
-                        }
-                        for lr_item in item
-                    ]
-                )
-            elif isinstance(item, LRItem):
-                canonical_collection_serialized.append(
-                    {
-                        "production": item.production,
-                        "dot_position": item.dot_position,
-                        "lookahead": list(item.lookahead),
+        for i, state in enumerate(parser.canonical_collection):
+            try:
+                state_info = {
+                    f"I{i}": {
+                        "items": [str(item) for item in state],
+                        "transitions": {
+                            symbol: f"I{parser.goto_table[(i, symbol)]}"
+                            for symbol in parser.non_terminals + parser.terminals
+                            if (i, symbol) in parser.goto_table
+                        },
                     }
-                )
-            else:
+                }
+                canonical_collection_serialized.append(state_info)
+            except Exception as inner_exception:
                 return (
                     jsonify(
                         {
-                            "error": f"Unexpected item in canonical_collection: {type(item)}"
+                            "error": f"Unexpected item in canonical_collection: {str(inner_exception)}"
                         }
                     ),
                     500,
                 )
 
         return jsonify({"canonical_collection": canonical_collection_serialized})
+
     except Exception as e:
         return (
             jsonify({"error": f"Error fetching canonical collection sets: {str(e)}"}),
             500,
         )
+
+
+@app.route("/parsing_tables", methods=["POST"])
+def get_parsing_tables():
+    global parser
+    try:
+        if not parser:
+            # Get the grammar from the request body
+            grammar = request.json.get("grammar", [])
+            if not grammar:
+                return jsonify({"error": "Grammar is required"}), 400
+
+            # Format the grammar for the parser
+            formatted_grammar = [(item[0], item[1]) for item in grammar]
+
+            # Initialize the parser
+            parser = CanonicalLRParser(formatted_grammar)
+
+        # Extract terminals and non-terminals
+        terminals = list(parser.terminals) + ["$"]
+        non_terminals = [nt for nt in parser.non_terminals if nt != "S'"]
+
+        # Prepare headers for the action and goto tables
+        action_headers = ["State"] + terminals
+        goto_headers = non_terminals
+        combined_headers = action_headers + goto_headers
+
+        # Generate rows for the tables
+        action_rows = []
+        goto_rows = []
+        combined_rows = []
+        max_state = len(parser.canonical_collection) - 1
+
+        for state in range(max_state + 1):
+            # Populate action table row
+            action_row = {"State": state}
+            for symbol in terminals:
+                action = parser.action_table.get((state, symbol), "")
+                action_row[symbol] = action if action else None
+            action_rows.append(action_row)
+
+            # Populate goto table row
+            goto_row = {"State": state}
+            for symbol in non_terminals:
+                goto_state = parser.goto_table.get((state, symbol), "")
+                goto_row[symbol] = goto_state if goto_state else None
+            goto_rows.append(goto_row)
+
+        for state in range(max_state + 1):
+            # Initialize a combined row
+            combined_row = {"State": state}
+
+            # Populate action table entries
+            for symbol in terminals:
+                action = parser.action_table.get((state, symbol), "")
+                combined_row[symbol] = action if action else None
+
+            # Populate goto table entries
+            for symbol in non_terminals:
+                goto_state = parser.goto_table.get((state, symbol), "")
+                combined_row[symbol] = goto_state if goto_state else None
+
+            # Append the combined row
+            combined_rows.append(combined_row)
+
+        # Combine headers and rows into JSON format
+        tables = {
+            "action_table": {
+                "headers": action_headers,
+                "rows": action_rows,
+            },
+            "goto_table": {
+                "headers": goto_headers,
+                "rows": goto_rows,
+            },
+            "combined_table": {
+                "headers": combined_headers,
+                "rows": combined_rows,
+            },
+        }
+        return jsonify(tables)
+
+    except Exception as e:
+        return jsonify({"error": f"Error parsing input: {str(e)}"}), 500
+
+
+@app.route("/parse", methods=["POST"])
+def parse_input():
+    global parser
+    try:
+        # Get the grammar and input_string from the request body
+        grammar = request.json.get("grammar", [])
+        input_string = request.json.get("input_string", "")
+        if not isinstance(input_string, str):
+            return jsonify({"error": "input_string must be a string"}), 400
+        if not grammar:
+            return jsonify({"error": "Grammar is required"}), 400
+        if not input_string:
+            return jsonify({"error": "input_string is required"}), 400
+
+        if not parser:
+            # Format the grammar for the parser
+            formatted_grammar = [(item[0], item[1]) for item in grammar]
+
+            # Initialize the parser
+            parser = CanonicalLRParser(formatted_grammar)
+            # Add end marker to input
+        input_tokens = input_string.split()
+        input_tokens.append("$")
+
+        # Initialize stack with state 0
+        stack = [(0, "$")]
+        input_pos = 0
+
+        # Store parsing steps
+        parse_steps = []
+        headers = ["Stack", "Input", "Action"]
+
+        while True:
+            current_state = stack[-1][0]
+            current_input = input_tokens[input_pos]
+
+            if (current_state, current_input) not in parser.action_table:
+                # Format current state
+                stack_str = str(stack)
+                input_str = " ".join(input_tokens[input_pos:])
+                action_str = "error"
+
+                # Store step
+                parse_steps.append([stack_str, input_str, action_str])
+                return jsonify(
+                    {
+                        "success": False,
+                        "error": f"Parsing error at position {input_pos}",
+                        "steps": [
+                            {
+                                "stack": stack_str,
+                                "input": input_str,
+                                "action": action_str,
+                            }
+                            for stack_str, input_str, action_str in parse_steps
+                        ],
+                    }
+                )
+
+            action, value = parser.action_table[(current_state, current_input)]
+
+            # Format current state
+            stack_str = str(stack)
+            input_str = " ".join(input_tokens[input_pos:])
+            action_str = f"{action} {value}"
+
+            # Store step
+            parse_steps.append([stack_str, input_str, action_str])
+
+            if action == "shift":
+                stack.append((value, current_input))
+                input_pos += 1
+            elif action == "reduce":
+                production = parser.grammar[value]
+                for _ in range(len(production[1])):
+                    stack.pop()
+                prev_state = stack[-1][0]
+                goto_state = parser.goto_table[(prev_state, production[0])]
+                stack.append((goto_state, production[0]))
+            elif action == "accept":
+                # Return final result
+                return jsonify(
+                    {
+                        "success": True,
+                        "steps": [
+                            {
+                                "stack": stack_str,
+                                "input": input_str,
+                                "action": action_str,
+                            }
+                            for stack_str, input_str, action_str in parse_steps
+                        ],
+                    }
+                )
+    except Exception as e:
+        return jsonify({"error": f"Error generating parsing tables: {str(e)}"}), 500
+
+
+# data = request.json
+# if not data or "input_string" not in data:
+#     return jsonify({"error": "Missing input_string parameter"}), 400
+
+# input_string = data["input_string"]
+# result = parser.parse(input_string)
+# return jsonify(result)
 
 
 if __name__ == "__main__":
