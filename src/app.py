@@ -1,8 +1,11 @@
 from flask import Flask, request, jsonify
 from cannonical_lr_parser import CanonicalLRParser
 from lr_item import LRItem
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
+
 parser = None  # Global parser instance
 
 

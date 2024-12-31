@@ -17,14 +17,16 @@ class CanonicalLRParser:
         self.compute_first_sets()
         self.compute_follow_sets()
 
-        self.display_grammar()
-        print(self.get_first_and_follow_sets_table())
+        # self.display_grammar()
+        # print(self.get_first_and_follow_sets_table())
 
         self.build_canonical_collection()
 
-        self.build_parsing_table()
+        self.print_canonical_collection()
 
-        self.print_parsing_tables()
+        # self.build_parsing_table()
+
+        # self.print_parsing_tables()
 
     def get_first_sets_table(self):
         headers = ["Symbol", "First"]
@@ -275,6 +277,11 @@ class CanonicalLRParser:
                     # self.goto_and_action_table[(state_index, symbol)] = goto_state_index
 
             state_index += 1
+
+    def print_canonical_collection(self):
+        # temp=[]
+        # for i, state in enumerate(self.canonical_collection):
+        #     print({})
 
         for i, state in enumerate(self.canonical_collection):
             print(f"\nState I{i}:")
