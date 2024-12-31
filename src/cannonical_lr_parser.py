@@ -355,6 +355,10 @@ class CanonicalLRParser:
         stack = [(0, "$")]
         input_pos = 0
 
+        # Store parsing steps
+        parse_steps = []
+        headers = ["Stack", "Input", "Action"]
+
         while True:
             current_state = stack[-1][0]
             current_input = input_tokens[input_pos]
@@ -364,21 +368,25 @@ class CanonicalLRParser:
 
             action, value = self.action_table[(current_state, current_input)]
 
+            # Format current state
+            stack_str = str(stack)
+            input_str = " ".join(input_tokens[input_pos:])
+            action_str = f"{action} {value}"
+
+            # Store step
+            parse_steps.append([stack_str, input_str, action_str])
+
             if action == "shift":
                 stack.append((value, current_input))
                 input_pos += 1
             elif action == "reduce":
                 production = self.grammar[value]
-                # Pop |β| symbols off the stack
                 for _ in range(len(production[1])):
                     stack.pop()
-                # Go to state found in goto table
                 prev_state = stack[-1][0]
                 goto_state = self.goto_table[(prev_state, production[0])]
                 stack.append((goto_state, production[0]))
             elif action == "accept":
+                # Print final table
+                print(tabulate(parse_steps, headers=headers, tablefmt="grid"))
                 return True
-
-            print(f"Stack: {stack}")
-            print(f"Input: {' '.join(input_tokens[input_pos:])}")
-            print(f"Action: {action} {value}\n")

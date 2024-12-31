@@ -7,7 +7,7 @@ def main():
     grammar = [
         ("S", ["L", "=", "R"]),
         ("S", ["R"]),
-        ("L", ["*", "R"]),
+        ("L", ["R", "*", "R"]),
         ("L", ["id"]),
         ("R", ["L"]),
     ]
@@ -16,7 +16,7 @@ def main():
     parser = CanonicalLRParser(grammar)
 
     # Test string
-    test_string = "id = * id"
+    test_string = "id = id * id"
     print(f"Parsing string: {test_string}")
     try:
         result = parser.parse(test_string)
