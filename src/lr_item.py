@@ -1,5 +1,10 @@
 class LRItem:
-    def __init__(self, production: tuple[str, list[str]], dot_position: int, lookahead: None | set[str]=None):
+    def __init__(
+        self,
+        production: tuple[str, list[str]],
+        dot_position: int,
+        lookahead: None | set[str] = None,
+    ):
         self.production = tuple(production)  # (left_side, right_side)
         self.dot_position = dot_position
         self.lookahead: set[str] = set(lookahead) if lookahead else set()
