@@ -1,4 +1,4 @@
-from lr_item import LRItem
+from src.lr_item import LRItem
 from tabulate import tabulate
 
 
