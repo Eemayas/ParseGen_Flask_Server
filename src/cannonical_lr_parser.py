@@ -1,4 +1,4 @@
-from lr_item import LRItem
+from src.lr_item import LRItem
 from tabulate import tabulate
 
 
@@ -15,7 +15,12 @@ class CanonicalLRParser:
         self.initialize_grammar()
         self.compute_first_sets()
         self.compute_follow_sets()
-
+        self.parsing_data = {
+            "first_sets_and_follow_sets": [],
+            "parsing_table": [],
+            "parsing_steps": [],
+            "cannonical_collection":[],
+        }
         self.display_grammar()
         print(self.get_first_and_follow_sets_table())
 
@@ -49,7 +54,7 @@ class CanonicalLRParser:
         for symbol, symbols in self.first_sets.items():
             follow_set_val = self.follow_sets.get(symbol, " ") # use space for non-terminals
             data.append((symbol, symbols, follow_set_val))
-
+        self.parsing_data["first_sets_and_follow_sets"].append(data)
         return tabulate(data, headers=headers,  tablefmt="simple_grid")
     
     def display_grammar(self):
@@ -62,6 +67,18 @@ class CanonicalLRParser:
             for item in cannonical_set:
                 print(item.__str__())
             print("-"*40)
+        to_return_form = []
+        for cannonical_set in self.canonical_collection:
+            for item in cannonical_set:
+                right = list(item.production[1])
+                right.insert(item.dot_position, "•")
+                value = f"{item.production[0]} → {' '.join(right)}, {'/'.join(item.lookahead)}"
+                to_return_form.append(value)
+            self.parsing_data["cannonical_collection"].append(to_return_form)
+            to_return_form = []
+
+
+
 
     def get_action_and_goto_table(self):
         # augmenting to include $
@@ -81,6 +98,7 @@ class CanonicalLRParser:
                 else:
                     row.append(" ")
             data.append(row)
+        self.parsing_data["parsing_table"].append(data)
         return tabulate(data, headers=headers, tablefmt="simple_grid")
 
 
@@ -376,8 +394,9 @@ class CanonicalLRParser:
                 goto_state = self.goto_table[(prev_state, production[0])]
                 stack.append((goto_state, production[0]))
             elif action == "accept":
-                return True
-
+                return self.parsing_data
+            
             print(f"Stack: {stack}")
             print(f"Input: {' '.join(input_tokens[input_pos:])}")
             print(f"Action: {action} {value}\n")
+        
